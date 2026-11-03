@@ -1,85 +1,83 @@
-/* "Tape" layout: a step-by-step wizard, one service per screen, ending on a printed receipt. */
+/* "Statement" layout: an accordion of services with include switches, followed by a full fee statement table. */
 const S = createState();
-let step = 0, period = "month";
+const open = new Set(["tax"]);
 const $ = id => document.getElementById(id);
-const steps = () => ["pick", ...SERVICES.filter(s => S.selected.has(s.key)).map(s => s.key), "review"];
-const nameOf = k => k === "pick" ? "Services" : k === "review" ? "Estimate" : SERVICES.find(s => s.key === k).name;
+const fmt = v => (v < 0 ? "−" : "") + money(Math.abs(v));
 
-function receipt(e) {
-  const k = period === "year" ? 12 : 1, sfx = period === "year" ? "per year" : "per month";
-  const recurring = e.groups.some(g => g.lines.length);
-  return `<div class="tape">
-    <div class="sum-head">
-      <div class="lbl">Estimated recurring fee</div>
-      <div class="total">${recurring ? `${money(e.low * k)} – ${money(e.high * k)}<small>${sfx}</small>` : `<small>No recurring services</small>`}</div>
-      ${e.customCount ? `<div class="note">${e.customCount} item${e.customCount > 1 ? "s" : ""} quoted separately by your CPA.</div>` : ""}
-    </div>
-    <div class="lines">${e.groups.filter(g => g.lines.length).map(g => `<div class="grp"><h3>${g.svc.name}<span>${money(g.sub * k)}</span></h3>${g.lines.map(l =>
-      `<div class="row${l.monthly < 0 ? " neg" : ""}"><span>${esc(l.label)}</span><span class="${l.custom ? "cq" : ""}">${l.custom ? "Custom quote" : (l.monthly < 0 ? "−" : "") + money(Math.abs(l.monthly) * k)}</span></div>`).join("")}</div>`).join("")}</div>
-    ${e.oneTime.length ? `<div class="onetime"><div class="lbl">One-time</div>${e.oneTime.map(o =>
-      `<div class="row"><span>${esc(o.label)}</span><span class="${o.amount == null ? "cq" : ""}">${o.amount == null ? "Custom quote" : money(o.amount)}</span></div>`).join("")}</div>` : ""}
-    <div class="foot">
-      <a class="btn primary" href="${CONFIG.bookingUrl}" target="_blank" rel="noopener">Book a consultation</a>
-      <button type="button" class="btn ghost" id="copy">Copy estimate summary</button>
-      <p class="fine">Assumes clean, current records and a standard scope. Ranges include a ${CONFIG.rangeAllowance * 100}% allowance for complexity found during onboarding.</p>
-    </div>
-  </div>`;
-}
-
-function sectionNote(e, key) {
+function subLabel(e, key) {
   const g = e.groups.find(g => g.svc.key === key);
-  if (!g) return "";
-  if (g.lines.length) return `This section adds <b>${money(g.sub)}/mo</b> to your estimate.`;
-  if (g.oneTime.length) return `This is a one-time fee of <b>${g.oneTime[0].amount == null ? "custom quote" : money(g.oneTime[0].amount)}</b>.`;
-  return "";
+  if (!g) return `<span class="off">Not included</span>`;
+  const parts = [];
+  if (g.lines.length) parts.push(`${money(g.sub)}<small>/mo</small>`);
+  const ot = g.oneTime.reduce((t, o) => t + (o.amount || 0), 0);
+  if (ot) parts.push(`${money(ot)}<small> one-time</small>`);
+  if (g.lines.some(l => l.custom)) parts.push(`<small class="cq">+ custom quote</small>`);
+  return parts.join(" ") || "–";
 }
 
+function renderLedger(e) {
+  $("ledger").innerHTML = SERVICES.map(s => {
+    const on = S.selected.has(s.key), isOpen = on && open.has(s.key);
+    return `<article class="acct${on ? " on" : ""}">
+      <div class="acct-head">
+        <button type="button" class="switch" id="inc-${s.key}" role="switch" aria-checked="${on}" data-pick="${s.key}" aria-label="Include ${s.name}"><span></span></button>
+        <button type="button" class="acct-title" id="open-${s.key}" data-open="${s.key}" aria-expanded="${isOpen}" aria-controls="body-${s.key}"${on ? "" : " disabled"}>
+          <span class="name">${s.name}</span><span class="blurb">${s.blurb}</span>
+        </button>
+        <span class="acct-sub" id="sub-${s.key}">${subLabel(e, s.key)}</span>
+      </div>
+      ${isOpen ? `<div class="acct-body" id="body-${s.key}">${renderFields(S, s.key)}</div>` : ""}
+    </article>`;
+  }).join("");
+}
+
+function renderStatement(e) {
+  const recurring = e.groups.filter(g => g.lines.length);
+  const rows = recurring.map(g =>
+    `<tr class="g"><th scope="rowgroup" colspan="2">${g.svc.name}</th><td class="num">${money(g.sub)}</td><td class="num">${money(g.sub * 12)}</td></tr>` +
+    g.lines.map(l => `<tr><td></td><td>${esc(l.label)}</td>${l.custom
+      ? `<td class="num cq" colspan="2">Custom quote</td>`
+      : `<td class="num">${fmt(l.monthly)}</td><td class="num">${fmt(l.monthly * 12)}</td>`}</tr>`).join("")).join("");
+  $("statement").innerHTML = `
+    <div class="st-head">
+      <div>
+        <div class="lbl">Statement of estimated fees</div>
+        <div class="total">${recurring.length ? `${money(e.low)} – ${money(e.high)}<small> per month</small>` : `<small>No recurring services</small>`}</div>
+        ${recurring.length ? `<div class="annual">${money(e.low * 12)} – ${money(e.high * 12)} per year</div>` : ""}
+        ${e.customCount ? `<div class="note">${e.customCount} item${e.customCount > 1 ? "s are" : " is"} quoted separately by your CPA and not in this total.</div>` : ""}
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="${CONFIG.bookingUrl}" target="_blank" rel="noopener">Book a consultation</a>
+        <button type="button" class="btn ghost" id="copy">Copy summary</button>
+      </div>
+    </div>
+    ${recurring.length ? `<div class="tablewrap"><table>
+      <thead><tr><th scope="col">Service</th><th scope="col">Item</th><th scope="col" class="num">Per month</th><th scope="col" class="num">Per year</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><th colspan="2" scope="row">Subtotal</th><td class="num">${money(e.low)}</td><td class="num">${money(e.low * 12)}</td></tr>
+        <tr class="allow"><th colspan="2" scope="row">With ${CONFIG.rangeAllowance * 100}% complexity allowance</th><td class="num">${money(e.high)}</td><td class="num">${money(e.high * 12)}</td></tr></tfoot>
+    </table></div>` : ""}
+    ${e.oneTime.length ? `<div class="onetime"><div class="lbl">One-time fees</div>${e.oneTime.map(o =>
+      `<div class="row"><span>${esc(o.label)}</span><span class="${o.amount == null ? "cq" : ""}">${o.amount == null ? "Custom quote" : money(o.amount)}</span></div>`).join("")}</div>` : ""}
+    <p class="fine">Assumes clean, current records and a standard scope. Your CPA confirms the final quote on a call.</p>`;
+}
+
+function render() { const e = estimate(S); renderLedger(e); renderStatement(e); }
 function light() {
   const e = estimate(S);
-  $("running").textContent = e.groups.some(g => g.lines.length) ? `${money(e.low)} – ${money(e.high)}/mo` : "—";
-  const n = $("secnote"); if (n) n.innerHTML = sectionNote(e, n.dataset.key);
+  SERVICES.forEach(s => { const el = $("sub-" + s.key); if (el) el.innerHTML = subLabel(e, s.key); });
+  renderStatement(e);
 }
-
-function render() {
-  const st = steps();
-  if (step > st.length - 1) step = st.length - 1;
-  const cur = st[step], e = estimate(S);
-  $("rail").innerHTML = st.map((k, i) =>
-    `<li><button type="button" data-step="${i}" aria-current="${i === step ? "step" : "false"}" class="${i < step ? "done" : ""}"><span class="n">${i < step ? "✓" : i + 1}</span>${esc(nameOf(k))}</button></li>`).join("");
-  let html = `<p class="step">Step ${step + 1} of ${st.length}</p>`;
-  if (cur === "pick") {
-    html += `<h1>What can we help with?</h1>
-      <p class="lede">Choose every service you want priced. You'll answer a few questions about each one, then get an itemized estimate.</p>
-      <div class="picker">${SERVICES.map(s => `<button type="button" class="svc" id="svc-${s.key}" data-pick="${s.key}" aria-pressed="${S.selected.has(s.key)}"><b>${s.name}</b><small>${s.blurb}</small></button>`).join("")}</div>
-      ${S.selected.size ? "" : `<p class="note">Choose at least one service to continue.</p>`}`;
-  } else if (cur === "review") {
-    html += `<h1>Your estimate</h1>
-      <div class="period" role="group" aria-label="Show prices">${["month", "year"].map(p =>
-        `<button type="button" id="p-${p}" data-period="${p}" aria-pressed="${period === p}">${p === "month" ? "Monthly" : "Annual"}</button>`).join("")}</div>
-      ${receipt(e)}`;
-  } else {
-    const svc = SERVICES.find(s => s.key === cur);
-    html += `<h1>${svc.name}</h1><p class="lede" id="secnote" data-key="${cur}">${sectionNote(e, cur)}</p><div class="fields">${renderFields(S, cur)}</div>`;
-  }
-  $("stage").innerHTML = html;
-  $("back").disabled = step === 0;
-  $("next").hidden = cur === "review";
-  $("next").disabled = cur === "pick" && !S.selected.size;
-  $("next").textContent = step === st.length - 2 ? "See estimate →" : "Next →";
-  $("count").textContent = `${step + 1} / ${st.length}`;
-  light();
-}
-
-const goTo = i => { step = i; render(); $("rail").scrollIntoView({ block: "nearest" }); };
 
 document.addEventListener("click", ev => {
   const t = ev.target.closest("button"); if (!t) return;
-  if (t.dataset.pick) { const k = t.dataset.pick; S.selected.has(k) ? S.selected.delete(k) : S.selected.add(k); render(); return; }
-  if (t.dataset.step) { goTo(Number(t.dataset.step)); return; }
-  if (t.dataset.period) { period = t.dataset.period; render(); return; }
-  if (t.id === "back") { goTo(step - 1); return; }
-  if (t.id === "next") { goTo(step + 1); return; }
-  if (t.id === "copy") { copyText(summaryText(estimate(S), period), t); return; }
+  if (t.dataset.pick) {
+    const k = t.dataset.pick;
+    if (S.selected.has(k)) { S.selected.delete(k); open.delete(k); } else { S.selected.add(k); open.add(k); }
+    render(); $("inc-" + k).focus(); return;
+  }
+  if (t.dataset.open) { const k = t.dataset.open; open.has(k) ? open.delete(k) : open.add(k); render(); $("open-" + k).focus(); return; }
+  if (t.id === "copy") { copyText(summaryText(estimate(S), "month"), t); return; }
   if (handleFieldEvent(S, ev)) render();
 });
 ["change", "input"].forEach(type => document.addEventListener(type, ev => {
