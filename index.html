@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fee Estimator | Oak Capital</title>
+  <meta name="description" content="Estimate the cost of tax, bookkeeping, payroll, fractional CFO and valuation services.">
+  <link rel="stylesheet" href="styles.css">
+  <script src="engine.js" defer></script>
+  <script src="ui.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Oak Capital · Fee estimator</div>
+    <div class="running" aria-live="polite"><span class="lbl">Running total</span><output id="running"></output></div>
+  </header>
+  <ol class="rail" id="rail" aria-label="Steps"></ol>
+  <section class="stage" id="stage"></section>
+  <nav class="pager" aria-label="Step navigation">
+    <button type="button" class="btn ghost" id="back">← Back</button>
+    <span class="count" id="count"></span>
+    <button type="button" class="btn primary" id="next">Next →</button>
+  </nav>
+</div>
+</body>
+</html>
