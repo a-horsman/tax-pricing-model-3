@@ -1,4 +1,8 @@
 /* "Statement" layout: an accordion of services with include switches, followed by a full fee statement table. */
+(function () {
+"use strict";
+const { CONFIG, SERVICES, createState, money, esc, estimate, renderFields, handleFieldEvent, summaryText, copyText } = window.OakEstimator;
+
 const S = createState();
 const open = new Set(["tax"]);
 const $ = id => document.getElementById(id);
@@ -85,3 +89,4 @@ document.addEventListener("click", ev => {
 }));
 
 render();
+})();

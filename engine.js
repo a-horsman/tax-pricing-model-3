@@ -2,6 +2,9 @@
    Every design uses this file unchanged. Prices live in CONFIG; questions live in FIELDS.
    Tax and advisory amounts are ANNUAL. Bookkeeping, operations and CFO are MONTHLY.
    "custom" means the item is listed but quoted by a CPA. */
+(function (global) {
+"use strict";
+
 const CONFIG = {
   bookingUrl: "https://example.com/book",   // replace with your scheduling link
   rangeAllowance: 0.15,
@@ -281,3 +284,6 @@ function copyText(text, btn) {
   try { navigator.clipboard.writeText(text).then(() => done("Copied"), () => done("Copy not available here")); }
   catch (_) { done("Copy not available here"); }
 }
+
+global.OakEstimator = { CONFIG, SERVICES, FIELDS, createState, money, esc, estimate, renderFields, handleFieldEvent, summaryText, copyText };
+})(window);
