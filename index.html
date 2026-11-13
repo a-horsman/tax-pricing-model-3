@@ -3,21 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Fee Estimator | Oak Capital</title>
-  <meta name="description" content="Estimate the cost of tax, bookkeeping, payroll, fractional CFO and valuation services.">
+  <title>Tax Fee Estimator | Oak Capital</title>
+  <meta name="description" content="Estimate your annual fee for individual and business tax returns and tax planning.">
   <link rel="stylesheet" href="styles.css">
   <script src="engine.js" defer></script>
   <script src="ui.js" defer></script>
 </head>
 <body>
-<div class="wrap">
-  <header class="masthead">
-    <div class="brand">Oak Capital · Private Client Accounting</div>
-    <h1>Your engagement, line by line</h1>
-    <p class="lede">Include the services you need and open each one to tailor it. The statement at the bottom lists every fee, by month and by year.</p>
-  </header>
-  <section class="ledger" id="ledger" aria-label="Services"></section>
-  <section class="statement" id="statement" aria-live="polite" aria-label="Statement of estimated fees"></section>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="brand">Oak Capital · Accounting &amp; Advisory</div>
+    <h1>Price your tax work in two minutes</h1>
+    <p class="lede">Turn on the services you need, then fine-tune each one. Your estimate updates in the bar at the bottom of the screen.</p>
+    <div class="chips" id="chips" role="group" aria-label="Services"></div>
+  </div>
+</header>
+<main class="work">
+  <div class="tabs" role="tablist" id="tabs" aria-label="Selected services"></div>
+  <section class="tabpanel" id="tabpanel" role="tabpanel"></section>
+</main>
+<div class="bar" id="bar">
+  <div class="drawer" id="drawer" hidden>
+    <div class="drawer-inner">
+      <div class="lines" id="lines"></div>
+      <div class="onetime" id="onetime" hidden></div>
+      <div class="drawer-foot">
+        <button type="button" class="btn ghost" id="copy">Copy estimate summary</button>
+        <p class="fine">Annual fees based on our standard engagement rates. Assumes complete, organized records; your CPA confirms the final fee.</p>
+      </div>
+    </div>
+  </div>
+  <div class="bar-inner">
+    <div class="bar-total">
+      <span class="lbl">Estimated fee</span>
+      <strong id="total"></strong>
+      <span class="note" id="customNote" hidden></span>
+    </div>
+    <div class="bar-actions">
+      <div class="period" role="group" aria-label="Show prices">
+        <button type="button" id="p-year" data-period="year">Annual</button>
+        <button type="button" id="p-month" data-period="month">Monthly</button>
+      </div>
+      <button type="button" class="btn ghost" id="toggleDrawer" aria-expanded="false" aria-controls="drawer">Breakdown</button>
+      <a class="btn primary" id="book" target="_blank" rel="noopener">Book a call</a>
+    </div>
+  </div>
 </div>
 </body>
 </html>

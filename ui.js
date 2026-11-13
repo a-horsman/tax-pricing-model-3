@@ -1,92 +1,85 @@
-/* "Statement" layout: an accordion of services with include switches, followed by a full fee statement table. */
+/* "Signal" layout: service chips, one tab per selected service, and a fixed price bar with a pull-up breakdown. */
 (function () {
 "use strict";
-const { CONFIG, SERVICES, createState, money, esc, estimate, renderFields, handleFieldEvent, summaryText, copyText } = window.OakEstimator;
+const { CONFIG, SERVICES, PERIOD, createState, money, esc, amt, totalText, estimate, renderFields, handleFieldEvent, summaryText, copyText } = window.OakEstimator;
 
 const S = createState();
-const open = new Set(["tax"]);
+let active = SERVICES[0].key, period = "year";
 const $ = id => document.getElementById(id);
-const fmt = v => (v < 0 ? "−" : "") + money(Math.abs(v));
 
-function subLabel(e, key) {
-  const g = e.groups.find(g => g.svc.key === key);
-  if (!g) return `<span class="off">Not included</span>`;
-  const parts = [];
-  if (g.lines.length) parts.push(`${money(g.sub)}<small>/mo</small>`);
-  const ot = g.oneTime.reduce((t, o) => t + (o.amount || 0), 0);
-  if (ot) parts.push(`${money(ot)}<small> one-time</small>`);
-  if (g.lines.some(l => l.custom)) parts.push(`<small class="cq">+ custom quote</small>`);
-  return parts.join(" ") || "–";
+
+function renderChips() {
+  $("chips").innerHTML = SERVICES.map(s =>
+    `<button type="button" class="chip" id="chip-${s.key}" data-pick="${s.key}" aria-pressed="${S.selected.has(s.key)}"><span class="tick" aria-hidden="true"></span>${s.name}</button>`).join("");
 }
 
-function renderLedger(e) {
-  $("ledger").innerHTML = SERVICES.map(s => {
-    const on = S.selected.has(s.key), isOpen = on && open.has(s.key);
-    return `<article class="acct${on ? " on" : ""}">
-      <div class="acct-head">
-        <button type="button" class="switch" id="inc-${s.key}" role="switch" aria-checked="${on}" data-pick="${s.key}" aria-label="Include ${s.name}"><span></span></button>
-        <button type="button" class="acct-title" id="open-${s.key}" data-open="${s.key}" aria-expanded="${isOpen}" aria-controls="body-${s.key}"${on ? "" : " disabled"}>
-          <span class="name">${s.name}</span><span class="blurb">${s.blurb}</span>
-        </button>
-        <span class="acct-sub" id="sub-${s.key}">${subLabel(e, s.key)}</span>
-      </div>
-      ${isOpen ? `<div class="acct-body" id="body-${s.key}">${renderFields(S, s.key)}</div>` : ""}
-    </article>`;
+function renderTabs(e) {
+  $("tabs").innerHTML = SERVICES.filter(s => S.selected.has(s.key)).map(s => {
+    const g = e.groups.find(g => g.svc.key === s.key);
+    const sub = g.lines.length ? money(amt(g.sub, period)) : g.oneTime.length ? "One-time" : "";
+    return `<button type="button" role="tab" id="tab-${s.key}" data-tab="${s.key}" aria-selected="${s.key === active}"><span>${s.name}</span><small>${sub}</small></button>`;
   }).join("");
 }
 
-function renderStatement(e) {
-  const recurring = e.groups.filter(g => g.lines.length);
-  const rows = recurring.map(g =>
-    `<tr class="g"><th scope="rowgroup" colspan="2">${g.svc.name}</th><td class="num">${money(g.sub)}</td><td class="num">${money(g.sub * 12)}</td></tr>` +
-    g.lines.map(l => `<tr><td></td><td>${esc(l.label)}</td>${l.custom
-      ? `<td class="num cq" colspan="2">Custom quote</td>`
-      : `<td class="num">${fmt(l.monthly)}</td><td class="num">${fmt(l.monthly * 12)}</td>`}</tr>`).join("")).join("");
-  $("statement").innerHTML = `
-    <div class="st-head">
-      <div>
-        <div class="lbl">Statement of estimated fees</div>
-        <div class="total">${recurring.length ? `${money(e.low)} – ${money(e.high)}<small> per month</small>` : `<small>No recurring services</small>`}</div>
-        ${recurring.length ? `<div class="annual">${money(e.low * 12)} – ${money(e.high * 12)} per year</div>` : ""}
-        ${e.customCount ? `<div class="note">${e.customCount} item${e.customCount > 1 ? "s are" : " is"} quoted separately by your CPA and not in this total.</div>` : ""}
-      </div>
-      <div class="actions">
-        <a class="btn primary" href="${CONFIG.bookingUrl}" target="_blank" rel="noopener">Book a consultation</a>
-        <button type="button" class="btn ghost" id="copy">Copy summary</button>
-      </div>
-    </div>
-    ${recurring.length ? `<div class="tablewrap"><table>
-      <thead><tr><th scope="col">Service</th><th scope="col">Item</th><th scope="col" class="num">Per month</th><th scope="col" class="num">Per year</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><th colspan="2" scope="row">Subtotal</th><td class="num">${money(e.low)}</td><td class="num">${money(e.low * 12)}</td></tr>
-        <tr class="allow"><th colspan="2" scope="row">With ${CONFIG.rangeAllowance * 100}% complexity allowance</th><td class="num">${money(e.high)}</td><td class="num">${money(e.high * 12)}</td></tr></tfoot>
-    </table></div>` : ""}
-    ${e.oneTime.length ? `<div class="onetime"><div class="lbl">One-time fees</div>${e.oneTime.map(o =>
-      `<div class="row"><span>${esc(o.label)}</span><span class="${o.amount == null ? "cq" : ""}">${o.amount == null ? "Custom quote" : money(o.amount)}</span></div>`).join("")}</div>` : ""}
-    <p class="fine">Assumes clean, current records and a standard scope. Your CPA confirms the final quote on a call.</p>`;
+function renderPanel() {
+  const svc = SERVICES.find(s => s.key === active);
+  $("tabpanel").innerHTML = svc
+    ? `<div class="panel-head"><h2>${svc.name}</h2><p class="sub">${svc.blurb}</p></div><div class="fields">${renderFields(S, active)}</div>`
+    : `<div class="empty">Turn on a service above to start your estimate.</div>`;
+  if (svc) $("tabpanel").setAttribute("aria-labelledby", "tab-" + svc.key);
 }
 
-function render() { const e = estimate(S); renderLedger(e); renderStatement(e); }
-function light() {
-  const e = estimate(S);
-  SERVICES.forEach(s => { const el = $("sub-" + s.key); if (el) el.innerHTML = subLabel(e, s.key); });
-  renderStatement(e);
+function renderSummary() {
+  const e = estimate(S), sfx = PERIOD[period].short;
+  document.querySelectorAll("[data-period]").forEach(b => b.setAttribute("aria-pressed", b.dataset.period === period));
+  $("total").innerHTML = e.groups.some(g => g.lines.length) ? `${totalText(e, period)}<small>${sfx}</small>` : `<small>No services selected</small>`;
+  $("customNote").hidden = !e.customCount;
+  $("customNote").textContent = e.customCount ? `+ ${e.customCount} custom-quoted item${e.customCount > 1 ? "s" : ""}` : "";
+  $("lines").innerHTML = e.groups.filter(g => g.lines.length).map(g =>
+    `<div class="grp"><h3>${g.svc.name}<span>${money(amt(g.sub, period))}</span></h3>${g.lines.map(l =>
+      `<div class="row${l.amount < 0 ? " neg" : ""}"><span>${esc(l.label)}</span><span class="${l.custom ? "cq" : ""}">${l.custom ? "Custom quote" : (l.amount < 0 ? "−" : "") + money(amt(Math.abs(l.amount), period))}</span></div>`).join("")}</div>`).join("")
+    || `<p class="fine">No services selected.</p>`;
+  const ot = $("onetime");
+  ot.hidden = !e.oneTime.length;
+  ot.innerHTML = `<div class="lbl">One-time</div>` + e.oneTime.map(o =>
+    `<div class="row"><span>${esc(o.label)}</span><span class="${o.amount == null ? "cq" : ""}">${o.amount == null ? "Custom quote" : money(o.amount)}</span></div>`).join("");
+  renderTabs(e);
+}
+
+function render() {
+  if (!S.selected.has(active)) active = (SERVICES.find(s => S.selected.has(s.key)) || {}).key || null;
+  renderChips(); renderPanel(); renderSummary();
 }
 
 document.addEventListener("click", ev => {
   const t = ev.target.closest("button"); if (!t) return;
   if (t.dataset.pick) {
     const k = t.dataset.pick;
-    if (S.selected.has(k)) { S.selected.delete(k); open.delete(k); } else { S.selected.add(k); open.add(k); }
-    render(); $("inc-" + k).focus(); return;
+    if (S.selected.has(k)) S.selected.delete(k); else { S.selected.add(k); active = k; }
+    render(); return;
   }
-  if (t.dataset.open) { const k = t.dataset.open; open.has(k) ? open.delete(k) : open.add(k); render(); $("open-" + k).focus(); return; }
-  if (t.id === "copy") { copyText(summaryText(estimate(S), "month"), t); return; }
-  if (handleFieldEvent(S, ev)) render();
+  if (t.dataset.tab) { active = t.dataset.tab; render(); return; }
+  if (t.dataset.period) { period = t.dataset.period; renderSummary(); return; }
+  if (t.id === "toggleDrawer") {
+    const open = $("drawer").hidden; $("drawer").hidden = !open;
+    t.setAttribute("aria-expanded", open); t.textContent = open ? "Hide breakdown" : "Breakdown"; return;
+  }
+  if (t.id === "copy") { copyText(summaryText(estimate(S), period), t); return; }
+  if (handleFieldEvent(S, ev)) { renderPanel(); renderSummary(); }
 });
 ["change", "input"].forEach(type => document.addEventListener(type, ev => {
-  const r = handleFieldEvent(S, ev); if (r === "full") render(); else if (r === "light") light();
+  const r = handleFieldEvent(S, ev); if (r === "full") { renderPanel(); renderSummary(); } else if (r === "light") renderSummary();
 }));
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && !$("drawer").hidden) $("toggleDrawer").click();
+  const tab = ev.target.closest && ev.target.closest('[role="tab"]');
+  if (tab && (ev.key === "ArrowRight" || ev.key === "ArrowLeft")) {
+    const tabs = [...document.querySelectorAll('[role="tab"]')], i = tabs.indexOf(tab);
+    const next = tabs[(i + (ev.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    active = next.dataset.tab; render(); document.getElementById(next.id).focus();
+  }
+});
 
+$("book").href = CONFIG.bookingUrl;
 render();
 })();
